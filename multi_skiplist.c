@@ -20,6 +20,7 @@
 #include <linux/random.h>
 
 #include "fc_memory.h"
+#include "fast_mblock.h"
 #include "multi_skiplist.h"
 
 int multi_skiplist_init_ex(MultiSkiplist *sl, const int level_count,
