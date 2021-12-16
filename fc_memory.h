@@ -18,9 +18,12 @@
 #ifndef _FC_MEMORY_H
 #define _FC_MEMORY_H
 
-#include <stdlib.h>
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#include <linux/errno.h>
+
 #include "common_define.h"
-#include "logger.h"
 
 typedef void (*fc_memory_oom_notify_func)(const size_t curr_size);
 
@@ -34,11 +37,10 @@ extern "C" {
             const int line, size_t size)
     {
         void *ptr;
-        ptr = malloc(size);
+        ptr = kmalloc(size, GFP_KERNEL);
         if (ptr == NULL) {
-            logError("file: %s, line: %d, malloc %"PRId64" bytes fail, "
-                    "errno: %d, error info: %s", file, line,
-                    (int64_t)size, errno, STRERROR(errno));
+            printk(KERN_ERR "file: %s, line: %d, malloc %d bytes fail\n",
+                    file, line, size);
             if (g_oom_notify != NULL) {
                 g_oom_notify(size);
             }
@@ -50,12 +52,12 @@ extern "C" {
     static inline void *fc_realloc_ex(const char *file,
             const int line, void *ptr, size_t size)
     {
-        void *new_ptr;
-        new_ptr = realloc(ptr, size);
+        void *new_ptr = NULL;
+        new_ptr = krealloc(ptr, size, GFP_KERNEL);
+
         if (new_ptr == NULL) {
-            logError("file: %s, line: %d, realloc %"PRId64" bytes fail, "
-                    "errno: %d, error info: %s", file, line,
-                    (int64_t)size, errno, STRERROR(errno));
+            printk(KERN_ERR "file: %s, line: %d, realloc %d bytes fail\n",
+                    file, line, size);
             if (g_oom_notify != NULL) {
                 g_oom_notify(size);
             }
@@ -87,11 +89,11 @@ extern "C" {
             const int line, size_t count, size_t size)
     {
         void *ptr;
-        ptr = calloc(count, size);
+        ptr = kmalloc_array(count, size, GFP_KERNEL);
+
         if (ptr == NULL) {
-            logError("file: %s, line: %d, malloc %"PRId64" bytes fail, "
-                    "errno: %d, error info: %s", file, line,
-                    (int64_t)(count * size), errno, STRERROR(errno));
+            printk(KERN_ERR "file: %s, line: %d, malloc %d bytes fail\n", 
+                    file, line, (count * size));
             if (g_oom_notify != NULL) {
                 g_oom_notify(count * size);
             }
