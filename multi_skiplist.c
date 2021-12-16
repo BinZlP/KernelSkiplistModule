@@ -17,8 +17,8 @@
 
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/random.h>
 
-#include "logger.h"
 #include "fc_memory.h"
 #include "multi_skiplist.h"
 
