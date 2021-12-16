@@ -2,6 +2,10 @@
 #ifndef _COMMON_DEFINE_H
 #define _COMMON_DEFINE_H
 
+#include <linux/errno.h>
+
+typedef long long int64_t;
+
 // Return error description
 char *strerror(int error){
     int er;

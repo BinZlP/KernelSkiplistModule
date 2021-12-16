@@ -21,6 +21,9 @@
 
 #include "multi_skiplist.h"
 
+#define true 1
+#define false 0
+
 int multi_skiplist_init_ex(MultiSkiplist *sl, const int level_count,
         skiplist_compare_func compare_func,
         skiplist_free_func free_func,
@@ -247,8 +250,7 @@ static inline int multi_skiplist_get_level_index(MultiSkiplist *sl)
 
     for (i=0; i<sl->top_level_index; i++) {
         get_random_bytes(rand_num, sizeof(rand_num));
-        rand_num = rand_num % RAND_MAX;
-        if (rand_num < RAND_MAX / 2) {
+        if (rand_num % 2) {
             break;
         }
     }
@@ -377,7 +379,7 @@ int multi_skiplist_do_delete(MultiSkiplist *sl, void *data,
 int multi_skiplist_delete(MultiSkiplist *sl, void *data)
 {
     int delete_count;
-    return multi_skiplist_do_delete(sl, data, false, &delete_count);
+    return multi_skiplist_do_delete(sl, data, true, &delete_count);
 }
 
 int multi_skiplist_delete_all(MultiSkiplist *sl, void *data, int *delete_count)
@@ -400,17 +402,17 @@ int multi_skiplist_find_all(MultiSkiplist *sl, void *data,
     int level_index;
     MultiSkiplistNode *previous;
 
-    iterator->current.data = NULL;
+    iterator->cursor.data = NULL;
     previous = multi_skiplist_get_previous(sl, data, &level_index);
     if (previous == NULL) {
-        iterator->current.node = sl->tail;
+        iterator->cursor.node = sl->tail;
         iterator->tail = sl->tail;
         return ENOENT;
     }
     else {
-        iterator->current.node = previous->links[level_index];
-        iterator->tail = iterator->current.node->links[0];
-        iterator->current.data = iterator->current.node->head;
+        iterator->cursor.node = previous->links[level_index];
+        iterator->tail = iterator->cursor.node->links[0];
+        iterator->cursor.data = iterator->cursor.node->head;
         return 0;
     }
 }
@@ -429,25 +431,25 @@ int multi_skiplist_find_range(MultiSkiplist *sl, void *start_data, void *end_dat
         MultiSkiplistIterator *iterator)
 {
     if (sl->compare_func(start_data, end_data) > 0) {
-        iterator->current.node = sl->tail;
-        iterator->current.data = NULL;
+        iterator->cursor.node = sl->tail;
+        iterator->cursor.data = NULL;
         iterator->tail = sl->tail;
         return EINVAL;
     }
 
-    iterator->current.node = multi_skiplist_get_first_larger_or_equal(sl, start_data);
-    if (iterator->current.node == sl->tail) {
-        iterator->current.data = NULL;
+    iterator->cursor.node = multi_skiplist_get_first_larger_or_equal(sl, start_data);
+    if (iterator->cursor.node == sl->tail) {
+        iterator->cursor.data = NULL;
         iterator->tail = sl->tail;
         return ENOENT;
     }
 
     iterator->tail = multi_skiplist_get_first_larger(sl, end_data);
-    if (iterator->current.node != iterator->tail) {
-        iterator->current.data = iterator->current.node->head;
+    if (iterator->cursor.node != iterator->tail) {
+        iterator->cursor.data = iterator->cursor.node->head;
         return 0;
     } else {
-        iterator->current.data = NULL;
+        iterator->cursor.data = NULL;
         return ENOENT;
     }
 }

@@ -20,6 +20,7 @@
 
 #include <linux/kernel.h>
 #include <linux/string.h>
+#include <linux/types.h>
 
 #include "common_define.h"
 #include "fast_mblock.h"
@@ -56,7 +57,7 @@ typedef struct multi_skiplist_iterator {
     struct {
         MultiSkiplistNode *node;
         MultiSkiplistData *data;
-    } current;
+    } cursor;
 } MultiSkiplistIterator;
 
 #ifdef __cplusplus
@@ -88,12 +89,12 @@ static inline void multi_skiplist_iterator(MultiSkiplist *sl,
         MultiSkiplistIterator *iterator)
 {
     iterator->tail = sl->tail;
-    iterator->current.node = sl->top->links[0];
-    if (iterator->current.node != sl->tail) {
-        iterator->current.data = iterator->current.node->head;
+    iterator->cursor.node = sl->top->links[0];
+    if (iterator->cursor.node != sl->tail) {
+        iterator->cursor.data = iterator->cursor.node->head;
     }
     else {
-        iterator->current.data = NULL;
+        iterator->cursor.data = NULL;
     }
 }
 
@@ -101,19 +102,19 @@ static inline void *multi_skiplist_next(MultiSkiplistIterator *iterator)
 {
     void *data;
 
-    if (iterator->current.data == NULL) {
-        if (iterator->current.node == iterator->tail ||
-                iterator->current.node->links[0] == iterator->tail)
+    if (iterator->cursor.data == NULL) {
+        if (iterator->cursor.node == iterator->tail ||
+                iterator->cursor.node->links[0] == iterator->tail)
         {
             return NULL;
         }
 
-        iterator->current.node = iterator->current.node->links[0];
-        iterator->current.data = iterator->current.node->head;
+        iterator->cursor.node = iterator->cursor.node->links[0];
+        iterator->cursor.data = iterator->cursor.node->head;
     }
 
-    data = iterator->current.data->data;
-    iterator->current.data = iterator->current.data->next;
+    data = iterator->cursor.data->data;
+    iterator->cursor.data = iterator->cursor.data->next;
     return data;
 }
 
@@ -126,7 +127,7 @@ static inline void *multi_skiplist_get_first(MultiSkiplist *sl)
     }
 }
 
-static inline bool multi_skiplist_empty(MultiSkiplist *sl)
+static inline char multi_skiplist_empty(MultiSkiplist *sl)
 {
     return sl->top->links[0] == sl->tail;
 }
@@ -136,16 +137,16 @@ typedef const char * (*multi_skiplist_tostring_func)(void *data, char *buff, con
 static inline void multi_skiplist_print(MultiSkiplist *sl, multi_skiplist_tostring_func tostring_func)
 {
     int i;
-    MultiSkiplistNode *current;
+    MultiSkiplistNode *cursor;
     char buff[1024] = {0,};
 
     printk("###################\n");
     for (i=sl->top_level_index; i>=0; i--) {
         printk(" - level %d - \n", i);
-        current = sl->top->links[i];
-        while (current != sl->tail) {
-            printk("%s\n", tostring_func(current->head->data, buff, sizeof(buff)));
-            current = current->links[i];
+        cursor = sl->top->links[i];
+        while (cursor != sl->tail) {
+            printk("%s\n", tostring_func(cursor->head->data, buff, sizeof(buff)));
+            cursor = cursor->links[i];
         }
         printk("\n");
     }
