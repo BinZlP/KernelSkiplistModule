@@ -372,7 +372,7 @@ int fast_mblock_manager_stat_print_ex(const bool hide_empty, const int order_by)
                     (double)delay_free_mem / alloc_mem : 0.00);
     }
 
-    if (stats != NULL) free(stats);
+    if (stats != NULL) kfree(stats);
     return 0;
 }
 
