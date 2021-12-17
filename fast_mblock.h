@@ -13,6 +13,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// This is modified version for linux kernel module use.
+// The original source code is able to access at:
+// https://github.com/happyfish100/libfastcommon
+// Author: BinZlP (https://github.com/BinZlP)
+
 //fast_mblock.h
 
 #ifndef _FAST_MBLOCK_H
@@ -20,9 +25,16 @@
 
 #include <linux/kernel.h>
 #include <linux/kthread.h>
+#include <linux/types.h>
+#include <linux/mutex.h>
+#include <linux/string.h>
+#include <linux/sort.h>
+#include <linux/wait.h>
+#include <linux/ktime.h>
+#include <linux/timekeeping.h>
 
-#include "common_define.h"
 #include "fc_memory.h"
+#include "common_define.h"
 
 /* following two macros for debug only */
 /*
@@ -35,6 +47,8 @@
 
 #define FAST_MBLOCK_ORDER_BY_ALLOC_BYTES    1
 #define FAST_MBLOCK_ORDER_BY_ELEMENT_SIZE   2
+
+#define LOG_NOTHING 17
 
 /* free node chain */ 
 struct fast_mblock_node
@@ -98,6 +112,11 @@ struct fast_mblock_malloc_trunk_callback
     void *args;
 };
 
+typedef struct  {
+    struct mutex lock;
+    wait_queue_head_t cond;
+} thread_lock_cond_pair_t;
+
 struct fast_mblock_man
 {
     struct fast_mblock_info info;
@@ -116,7 +135,7 @@ struct fast_mblock_man
     struct fast_mblock_malloc_trunk_callback malloc_trunk_callback;
 
     bool need_lock;         //if need mutex lock
-    pthread_lock_cond_pair_t lcp;  //for read / write free node chain
+    thread_lock_cond_pair_t lcp;  //for read / write free node chain
     struct fast_mblock_man *prev;  //for stat manager
     struct fast_mblock_man *next;  //for stat manager
     void *init_args;          //args for alloc_init_func
@@ -220,7 +239,7 @@ static inline int fast_mblock_set_need_wait(struct fast_mblock_man *mblock,
     if (!mblock->need_lock || mblock->alloc_elements.limit <= 0)
     {
         printk(KERN_ERR "file: "__FILE__", line: %d, "
-                "need_lock: %d != 1 or alloc_elements.limit: %"PRId64" <= 0",
+                "need_lock: %d != 1 or alloc_elements.limit: %ld <= 0",
                 __LINE__, mblock->need_lock, mblock->alloc_elements.limit);
         return EINVAL;
     }
@@ -412,6 +431,18 @@ return error no, 0 for success, != 0 fail
 int fast_mblock_reclaim(struct fast_mblock_man *mblock,
         const int reclaim_target, int *reclaim_count,
         fast_mblock_free_trunks_func free_trunks_func);
+
+
+/**
+ * return current second of day
+ * 
+ */
+int get_current_time() {
+    struct timespec ts;
+    getnstimeofday(&ts);
+    return ts.tv_sec;
+}
+
 
 #ifdef __cplusplus
 }
