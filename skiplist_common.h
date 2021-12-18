@@ -50,13 +50,5 @@ static inline int skiplist_get_proper_level(const int target_count)
     }
 }
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif
 

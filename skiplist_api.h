@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
+
 #include "multi_skiplist.h"
 #include "common_define.h"
 
@@ -25,7 +26,7 @@ int f2fs_kv_init(const int level_count);
  * @brief Destroy global skiplist.
  * 
  */
-void f2fs_kv_destroy();
+void f2fs_kv_destroy(void);
 
 /**
  * @brief Get node's data from skiplist.

@@ -24,13 +24,14 @@
 #include <linux/kthread.h>
 #include <linux/errno.h>
 
-#include "shared_func.h"
 #include "common_define.h"
 #include "fast_mblock.h"
 
+#define LOG_ERR 3
+
 struct _fast_mblock_manager
 {
-    bool initialized;
+    bool is_init;
     int count;
     struct fast_mblock_man head;
 	struct mutex lock;
@@ -45,20 +46,20 @@ static struct _fast_mblock_manager mblock_manager = {false, 0};
 #define fast_mblock_get_trunk_size(mblock, block_size, element_count) \
     (sizeof(struct fast_mblock_malloc) + block_size * element_count)
 
-int fast_mblock_manager_init()
+int fast_mblock_manager_init(void)
 {
     // int result;
 	// if ((result=init_pthread_lock(&(mblock_manager.lock))) != 0)
 	// {
-	// 	printk(KERN_ERR " file: "__FILE__", line: %d, " \
-	// 		"init_pthread_lock fail, errno: %d, error info: %s", \
+	// 	printk(KERN_ERR " file: "__FILE__", line: %d, " 
+	// 		"init_pthread_lock fail, errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return result;
 	// }
     mutex_init(&(mblock_manager.lock));
 
     INIT_HEAD(&mblock_manager.head);
-    mblock_manager.initialized = true;
+    mblock_manager.is_init = true;
 
     return 0;
 }
@@ -78,7 +79,7 @@ static int cmp_mblock_info(struct fast_mblock_man *mb1, struct fast_mblock_man *
 static void add_to_mblock_list(struct fast_mblock_man *mblock)
 {
     struct fast_mblock_man *cursor;
-    if (!mblock_manager.initialized)
+    if (!mblock_manager.is_init)
     {
         return;
     }
@@ -110,7 +111,7 @@ static void add_to_mblock_list(struct fast_mblock_man *mblock)
 
 static void delete_from_mblock_list(struct fast_mblock_man *mblock)
 {
-    if (!mblock_manager.initialized || IS_EMPTY(mblock))
+    if (!mblock_manager.is_init || IS_EMPTY(mblock))
     {
         return;
     }
@@ -149,7 +150,7 @@ int fast_mblock_manager_stat(struct fast_mblock_info *stats,
     struct fast_mblock_man *cursor;
     struct fast_mblock_info *pStat;
 
-    if (!mblock_manager.initialized)
+    if (!mblock_manager.is_init)
     {
         *count = 0;
         return EFAULT;
@@ -279,6 +280,7 @@ int fast_mblock_manager_stat_print_ex(const bool hide_empty, const int order_by)
         char alloc_mem_str[32];
         char used_mem_str[32];
         char delay_free_mem_str[32];
+        // double element_percentage;
 
         if (order_by == FAST_MBLOCK_ORDER_BY_ALLOC_BYTES)
         {
@@ -321,55 +323,57 @@ int fast_mblock_manager_stat_print_ex(const bool hide_empty, const int order_by)
                 }
             }
 
-            printk("%20s %8d %8d %12d %11d %10d"
-                    " %10d %10d %10d %11.2f%%",
+            // element_percentage = pStat->element_total_count > 0 ? 100.00 * (double)(pStat->element_used_count) / (double)(pStat->element_total_count) : 0.00;
+            // printk("%20s %8d %8d %12lld %11lld %10lld %10lld %10lld %10lld %11.2f%%\n",
+            printk("%20s %8d %8d %12lld %11lld %10lld %10lld %10lld %10lld\n",
                     pStat->name, pStat->element_size, pStat->instance_count,
                     amem, pStat->trunk_total_count, pStat->trunk_used_count,
                     pStat->element_total_count, pStat->element_used_count,
-                    pStat->delay_free_elements,
-                    pStat->element_total_count > 0 ? 100.00 * (double)
-                    pStat->element_used_count / (double)
-                    pStat->element_total_count : 0.00);
+                    pStat->delay_free_elements);
         }
 
-        if (alloc_mem < 1024)
-        {
-            sprintf(alloc_mem_str, "%d bytes", alloc_mem);
-            sprintf(used_mem_str, "%d bytes", used_mem);
-            sprintf(delay_free_mem_str, "%d bytes", delay_free_mem);
-        }
-        else if (alloc_mem < 1024 * 1024)
-        {
-            sprintf(alloc_mem_str, "%.3f KB", (double)alloc_mem / 1024);
-            sprintf(used_mem_str, "%.3f KB", (double)used_mem / 1024);
-            sprintf(delay_free_mem_str, "%.3f KB",
-                    (double)delay_free_mem / 1024);
-        }
-        else if (alloc_mem < 1024 * 1024 * 1024)
-        {
-            sprintf(alloc_mem_str, "%.3f MB",
-                    (double)alloc_mem / (1024 * 1024));
-            sprintf(used_mem_str, "%.3f MB",
-                    (double)used_mem / (1024 * 1024));
-            sprintf(delay_free_mem_str, "%.3f MB",
-                    (double)delay_free_mem / (1024 * 1024));
-        }
-        else
-        {
-            sprintf(alloc_mem_str, "%.3f GB",
-                    (double)alloc_mem / (1024 * 1024 * 1024));
-            sprintf(used_mem_str, "%.3f GB",
-                    (double)used_mem / (1024 * 1024 * 1024));
-            sprintf(delay_free_mem_str, "%.3f GB",
-                    (double)delay_free_mem / (1024 * 1024 * 1024));
-        }
+        // if (alloc_mem < 1024)
+        // {
+            sprintf(alloc_mem_str, "%lld bytes", alloc_mem);
+            sprintf(used_mem_str, "%lld bytes", used_mem);
+            sprintf(delay_free_mem_str, "%lld bytes", delay_free_mem);
+        // }
+        // else if (alloc_mem < 1024 * 1024)
+        // {
+        //     sprintf(alloc_mem_str, "%.3f KB", (double)alloc_mem / 1024);
+        //     sprintf(used_mem_str, "%.3f KB", (double)used_mem / 1024);
+        //     sprintf(delay_free_mem_str, "%.3f KB",
+        //             (double)delay_free_mem / 1024);
+        // }
+        // else if (alloc_mem < 1024 * 1024 * 1024)
+        // {
+        //     sprintf(alloc_mem_str, "%.3f MB",
+        //             (double)alloc_mem / (1024 * 1024));
+        //     sprintf(used_mem_str, "%.3f MB",
+        //             (double)used_mem / (1024 * 1024));
+        //     sprintf(delay_free_mem_str, "%.3f MB",
+        //             (double)delay_free_mem / (1024 * 1024));
+        // }
+        // else
+        // {
+        //     sprintf(alloc_mem_str, "%.3f GB",
+        //             (double)alloc_mem / (1024 * 1024 * 1024));
+        //     sprintf(used_mem_str, "%.3f GB",
+        //             (double)used_mem / (1024 * 1024 * 1024));
+        //     sprintf(delay_free_mem_str, "%.3f GB",
+        //             (double)delay_free_mem / (1024 * 1024 * 1024));
+        // }
 
+        // printk("mblock entry count: %d, memory stat => { alloc : %s, "
+        //         "used: %s (%.2f%%), delay free: %s (%.2f%%) }",
+        //         count, alloc_mem_str, used_mem_str, alloc_mem > 0 ?
+        //         100.00 * (double)used_mem / alloc_mem : 0.00,
+        //         delay_free_mem_str, alloc_mem > 0 ? 100.00 *
+        //             (double)delay_free_mem / alloc_mem : 0.00);
         printk("mblock entry count: %d, memory stat => { alloc : %s, "
-                "used: %s (%.2f%%), delay free: %s (%.2f%%) }",
-                count, alloc_mem_str, used_mem_str, alloc_mem > 0 ?
-                100.00 * (double)used_mem / alloc_mem : 0.00,
-                delay_free_mem_str, alloc_mem > 0 ? 100.00 *
-                    (double)delay_free_mem / alloc_mem : 0.00);
+                "used: %s , delay free: %s }\n",
+                count, alloc_mem_str, used_mem_str,
+                delay_free_mem_str);
     }
 
     if (stats != NULL) kfree(stats);
@@ -396,7 +400,7 @@ int fast_mblock_init_ex2(struct fast_mblock_man *mblock, const char *name,
         fast_mblock_malloc_trunk_notify_func malloc_trunk_notify,
         void *malloc_trunk_args)
 {
-	int result;
+	// int result;
 
 	if (element_size <= 0)
 	{
@@ -425,14 +429,15 @@ int fast_mblock_init_ex2(struct fast_mblock_man *mblock, const char *name,
 
 	// if (need_lock && (result=init_pthread_lock_cond_pair(&(mblock->lcp))) != 0)
 	// {
-	// 	printk(KERN_ERR "file: "__FILE__", line: %d, " \
-	// 		"init_pthread_lock fail, errno: %d, error info: %s", \
+	// 	printk(KERN_ERR "file: "__FILE__", line: %d, " 
+	// 		"init_pthread_lock fail, errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return result;
 	// }
     if(need_lock) {
         mutex_init(&(mblock->lcp.lock));
-        init_waitqueue_head(&(mblock->lcp.cond));
+        init_waitqueue_head(&(mblock->lcp.q));
+        mblock->lcp.cond = 0;
     }
 
     mblock->alloc_init_func = init_func;
@@ -489,13 +494,9 @@ static int fast_mblock_prealloc(struct fast_mblock_man *mblock)
             mblock->info.element_total_count;
         if (avail_count <= 0)
         {
-            if (FC_LOG_BY_LEVEL(mblock->alloc_elements.exceed_log_level))
-            {
-                printk(&g_log_context, mblock->alloc_elements.
-                        exceed_log_level, "file: "__FILE__", line: %d, "
-                        "allocated elements exceed limit: %d",
-                        __LINE__, mblock->alloc_elements.limit);
-            }
+            printk("file: "__FILE__", line: %d, "
+                    "allocated elements exceed limit: %lld",
+                    __LINE__, mblock->alloc_elements.limit);
             return EOVERFLOW;
         }
 
@@ -562,6 +563,7 @@ static int fast_mblock_prealloc(struct fast_mblock_man *mblock)
 
     mblock->info.trunk_total_count++;
     mblock->info.element_total_count += alloc_count;
+    mblock->lcp.cond += alloc_count;
 
     if (mblock->malloc_trunk_callback.notify_func != NULL)
     {
@@ -579,6 +581,7 @@ static inline void fast_mblock_remove_trunk(struct fast_mblock_man *mblock,
 	pMallocNode->next->prev = pMallocNode->prev;
     mblock->info.trunk_total_count--;
     mblock->info.element_total_count -= pMallocNode->alloc_count;
+    mblock->lcp.cond -= pMallocNode->alloc_count;
 
     if (mblock->malloc_trunk_callback.notify_func != NULL)
     {
@@ -676,8 +679,8 @@ void fast_mblock_destroy(struct fast_mblock_man *mblock)
 static inline struct fast_mblock_node *alloc_node(
         struct fast_mblock_man *mblock)
 {
+    int result;
 	struct fast_mblock_node *pNode;
-	int result;
 
     while (1)
     {
@@ -716,7 +719,8 @@ static inline struct fast_mblock_node *alloc_node(
             break;
         }
 
-        pthread_cond_wait(&mblock->lcp.cond, &mblock->lcp.lock);
+        // pthread_cond_wait(&mblock->lcp.cond, &mblock->lcp.lock);
+        wait_event_interruptible(mblock->lcp.q, condition_check(&(mblock->lcp)));
         if (!*(mblock->alloc_elements.pcontinue_flag))
         {
             pNode = NULL;
@@ -727,6 +731,7 @@ static inline struct fast_mblock_node *alloc_node(
     if (pNode != NULL)
     {
         mblock->info.element_used_count++;
+        mblock->lcp.cond--;
         fast_mblock_ref_counter_inc(mblock, pNode);
     }
 
@@ -736,7 +741,7 @@ static inline struct fast_mblock_node *alloc_node(
 struct fast_mblock_node *fast_mblock_alloc(struct fast_mblock_man *mblock)
 {
 	struct fast_mblock_node *pNode;
-	int result;
+	// int result;
 
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
@@ -756,9 +761,9 @@ struct fast_mblock_node *fast_mblock_alloc(struct fast_mblock_man *mblock)
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_unlock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_unlock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// }
     if(mblock->need_lock) {
@@ -771,15 +776,15 @@ struct fast_mblock_node *fast_mblock_alloc(struct fast_mblock_man *mblock)
 int fast_mblock_free(struct fast_mblock_man *mblock,
 		     struct fast_mblock_node *pNode)
 {
-	int result;
+	// int result;
     bool notify;
 
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_lock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_lock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return result;
 	// }
@@ -791,12 +796,13 @@ int fast_mblock_free(struct fast_mblock_man *mblock,
 	pNode->next = mblock->free_chain_head;
 	mblock->free_chain_head = pNode;
     mblock->info.element_used_count--;
+    mblock->lcp.cond++;
     fast_mblock_ref_counter_dec(mblock, pNode);
 
     if (mblock->alloc_elements.need_wait && notify)
     {
         // pthread_cond_signal(&mblock->lcp.cond);
-        wake_up_interruptible(&(mblock->lcp.cond));
+        wake_up_interruptible(&(mblock->lcp.q));
     }
 
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
@@ -824,6 +830,7 @@ static inline void batch_free(struct fast_mblock_man *mblock,
     while (pNode != NULL)
     {
         mblock->info.element_used_count--;
+        mblock->lcp.cond++;
         fast_mblock_ref_counter_dec(mblock, pNode);
         pNode = pNode->next;
     }
@@ -834,7 +841,7 @@ static inline void batch_free(struct fast_mblock_man *mblock,
     if (mblock->alloc_elements.need_wait && notify)
     {
         // pthread_cond_broadcast(&mblock->lcp.cond);
-        wake_up_interruptible_all(&(mblock->lcp.cond));
+        wake_up_interruptible_all(&(mblock->lcp.q));
     }
 }
 
@@ -844,7 +851,7 @@ struct fast_mblock_node *fast_mblock_batch_alloc(
     struct fast_mblock_chain chain;
 	struct fast_mblock_node *pNode;
     int i;
-	int result;
+	// int result;
 
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
@@ -868,7 +875,6 @@ struct fast_mblock_node *fast_mblock_batch_alloc(
             {
                 break;
             }
-
             chain.tail->next = pNode;
             chain.tail = pNode;
         }
@@ -883,13 +889,13 @@ struct fast_mblock_node *fast_mblock_batch_alloc(
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
     //                 &mblock->lcp.lock)) != 0)
     // {
-    //     logError("file: "__FILE__", line: %d, " \
-    //             "call pthread_mutex_unlock fail, " \
-    //             "errno: %d, error info: %s", \
+    //     logError("file: "__FILE__", line: %d, " 
+    //             "call pthread_mutex_unlock fail, " 
+    //             "errno: %d, error info: %s", 
     //             __LINE__, result, STRERROR(result));
     // }
     if(mblock->need_lock) {
-        mutex_lock(&(mblock->lcp.lock));
+        mutex_unlock(&(mblock->lcp.lock));
     }
 
 	return chain.head;
@@ -898,7 +904,7 @@ struct fast_mblock_node *fast_mblock_batch_alloc(
 int fast_mblock_batch_free(struct fast_mblock_man *mblock,
         struct fast_mblock_chain *chain)
 {
-	int result;
+	// int result;
 
     if (chain->head == NULL) {
         return ENOENT;
@@ -907,9 +913,9 @@ int fast_mblock_batch_free(struct fast_mblock_man *mblock,
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_lock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_lock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return result;
 	// }
@@ -963,14 +969,14 @@ void fast_mblock_free_objects(struct fast_mblock_man *mblock,
 int fast_mblock_delay_free(struct fast_mblock_man *mblock,
 		     struct fast_mblock_node *pNode, const int deley)
 {
-	int result;
+	// int result;
 
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_lock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_lock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return result;
 	// }
@@ -992,14 +998,15 @@ int fast_mblock_delay_free(struct fast_mblock_man *mblock,
 
     mblock->info.element_used_count--;
     mblock->info.delay_free_elements++;
+    mblock->lcp.cond++;
     fast_mblock_ref_counter_dec(mblock, pNode);
 
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_unlock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_unlock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// }
     if(mblock->need_lock) {
@@ -1014,14 +1021,14 @@ static int fast_mblock_chain_count(struct fast_mblock_man *mblock,
 {
 	struct fast_mblock_node *pNode;
 	int count;
-	int result;
+	// int result;
 
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_lock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_lock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// 	return -1;
 	// }
@@ -1040,9 +1047,9 @@ static int fast_mblock_chain_count(struct fast_mblock_man *mblock,
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_unlock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_unlock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// }
     if (mblock->need_lock) {
@@ -1154,7 +1161,7 @@ OUTER:
         old_need_lock = mblock->need_lock;
         mblock->need_lock = false;
         printk("file: "__FILE__", line: %d, "
-                "reclaim trunks for %p, reclaimed trunks: %d, "
+                "reclaim trunks for %px, reclaimed trunks: %d, "
                 "free node count: %d", __LINE__,
                 mblock, *reclaim_count, fast_mblock_free_count(mblock));
         mblock->need_lock = old_need_lock;
@@ -1178,7 +1185,7 @@ void fast_mblock_free_trunks(struct fast_mblock_man *mblock,
         count++;
     }
     printk("file: "__FILE__", line: %d, "
-            "free_trunks for %p, free trunks: %d", __LINE__,
+            "free_trunks for %px, free trunks: %d", __LINE__,
             mblock, count);
 }
 
@@ -1199,9 +1206,9 @@ int fast_mblock_reclaim(struct fast_mblock_man *mblock,
 	// if (mblock->need_lock && (result=pthread_mutex_lock(
     //                 &mblock->lcp.lock)) != 0)
     // {
-    //     logError("file: "__FILE__", line: %d, " \
-    //             "call pthread_mutex_lock fail, " \
-    //             "errno: %d, error info: %s", \
+    //     logError("file: "__FILE__", line: %d, " 
+    //             "call pthread_mutex_lock fail, " 
+    //             "errno: %d, error info: %s", 
     //             __LINE__, result, STRERROR(result));
     //     *reclaim_count = 0;
     //     return result;
@@ -1226,9 +1233,9 @@ int fast_mblock_reclaim(struct fast_mblock_man *mblock,
 	// if (mblock->need_lock && (result=pthread_mutex_unlock(
     //                 &mblock->lcp.lock)) != 0)
 	// {
-	// 	logError("file: "__FILE__", line: %d, " \
-	// 		"call pthread_mutex_unlock fail, " \
-	// 		"errno: %d, error info: %s", \
+	// 	logError("file: "__FILE__", line: %d, " 
+	// 		"call pthread_mutex_unlock fail, " 
+	// 		"errno: %d, error info: %s", 
 	// 		__LINE__, result, STRERROR(result));
 	// }
     if (mblock->need_lock) {
@@ -1250,3 +1257,17 @@ int fast_mblock_reclaim(struct fast_mblock_man *mblock,
     return result;
 }
 
+int get_current_time(void) {
+    struct timespec64 ts;
+    ktime_get_ts64(&ts);
+    return ts.tv_sec;
+}
+
+bool condition_check(thread_lock_cond_pair_t *lcp) {
+    bool ret;
+    // mutex_lock(&(lcp->lock));
+    ret = lcp->cond > 0;
+    //if(ret) lcp->cond--;
+    // mutex_unlock(&(lcp->lock));
+    return ret;
+}

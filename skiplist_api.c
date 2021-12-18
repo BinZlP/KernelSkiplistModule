@@ -16,9 +16,11 @@ static void f2fs_kv_free_func(void *ptr) {
 int f2fs_kv_init(const int level_count) {
     int result;
 
+    fast_mblock_manager_init();
+
     global_skiplist = kmalloc(sizeof(MultiSkiplist), GFP_KERNEL);
     
-    result = multi_skiplist_Init(global_skiplist, level_count, 
+    result = multi_skiplist_init(global_skiplist, level_count, 
                 f2fs_kv_compare_func, f2fs_kv_free_func);
 
     if(result == 0) {
@@ -62,7 +64,7 @@ int f2fs_kv_put(int node_id, void *blk_addr) {
         printk("Skiplist | Inserted node %d\n", node_id);
     } else {
         printk("Skiplist | Failed to insert node %d. errno: %d, errmsg: %s\n", 
-                node_id, result, strerror(result));
+                node_id, result, STRERROR(result));
     }
 #endif
     return -result;
@@ -70,7 +72,7 @@ int f2fs_kv_put(int node_id, void *blk_addr) {
 EXPORT_SYMBOL(f2fs_kv_put);
 
 
-void f2fs_kv_destroy() {
+void f2fs_kv_destroy(void) {
     multi_skiplist_destroy(global_skiplist);
     kfree(global_skiplist);
 #ifdef _SKIPLIST_API_DEBUG

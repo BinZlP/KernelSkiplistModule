@@ -30,6 +30,7 @@
 #include <linux/string.h>
 #include <linux/sort.h>
 #include <linux/wait.h>
+#include <linux/time.h>
 #include <linux/ktime.h>
 #include <linux/timekeeping.h>
 
@@ -114,7 +115,8 @@ struct fast_mblock_malloc_trunk_callback
 
 typedef struct  {
     struct mutex lock;
-    wait_queue_head_t cond;
+    wait_queue_head_t q;
+    int cond;
 } thread_lock_cond_pair_t;
 
 struct fast_mblock_man
@@ -239,7 +241,7 @@ static inline int fast_mblock_set_need_wait(struct fast_mblock_man *mblock,
     if (!mblock->need_lock || mblock->alloc_elements.limit <= 0)
     {
         printk(KERN_ERR "file: "__FILE__", line: %d, "
-                "need_lock: %d != 1 or alloc_elements.limit: %ld <= 0",
+                "need_lock: %d != 1 or alloc_elements.limit: %lld <= 0",
                 __LINE__, mblock->need_lock, mblock->alloc_elements.limit);
         return EINVAL;
     }
@@ -380,7 +382,7 @@ init mblock manager
 parameters:
 return error no, 0 for success, != 0 fail
 */
-int fast_mblock_manager_init();
+int fast_mblock_manager_init(void);
 
 /**
 get mblock stat
@@ -434,14 +436,14 @@ int fast_mblock_reclaim(struct fast_mblock_man *mblock,
 
 
 /**
- * return current second of day
- * 
+ * return current second
  */
-int get_current_time() {
-    struct timespec ts;
-    getnstimeofday(&ts);
-    return ts.tv_sec;
-}
+int get_current_time(void) ;
+
+/**
+ * Return condition (true/false)
+ */
+bool condition_check(thread_lock_cond_pair_t *lcp);
 
 
 #ifdef __cplusplus
