@@ -2,10 +2,12 @@
 #define _SKIPLIST_API_H
 
 #define _SKIPLIST_API_DEBUG // Debug flag
-// #define _SKIPLIST_API_F2FS
+// #define SKIPLIST_API_F2FS
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/kthread.h>
+#include <linux/types.h>
 
 #include "multi_skiplist.h"
 #include "common_define.h"
@@ -13,6 +15,7 @@
 #ifdef SKIPLIST_API_F2FS
 #include <linux/f2fs_fs.h>
 #endif
+
 
 typedef struct {
     int node_id;
@@ -32,6 +35,22 @@ typedef struct {
     int nid;
     F2FS_NAT_Entry nat_entry;
 } Skiplist_Entry;
+
+#define IMMUTABLE_ENTRY_NUM DATA_ARRAY_SIZE/sizeof(Skiplist_Entry)
+
+typedef struct _BlockAddressNode{
+    void *block_address;
+    int size;
+    struct _BlockAddressNode *prev;
+    struct _BlockAddressNode *next;
+} BlockAddressNode;
+
+typedef struct _ThreadNode{
+    struct task_struct *task;
+    bool is_done;
+    struct _ThreadNode *prev;
+    struct _ThreadNode *next;
+} ThreadNode;
 
 /**
  * @brief Initialize a global skiplist.

@@ -30,6 +30,10 @@ static F2FS_NAT_Entry skiplist_get(__u32 node_id) {
     return result;
 }
 
+static void skiplist_print(void) {
+    f2fs_kv_print();
+} 
+
 ssize_t skiplist_read(struct file *fp, char __user *user_buffer,
         size_t length, loff_t *position) {
     
@@ -44,6 +48,11 @@ ssize_t skiplist_read(struct file *fp, char __user *user_buffer,
         return -result;
     }
     printk("Skiplist | Received data from user: %d - %d %d %d\n", entry.nid, entry.nat_entry.ino, entry.nat_entry.block_addr, entry.nat_entry.version);
+    
+    if(entry.nat_entry.block_addr == 2) { // print command
+        skiplist_print();
+        return 0;
+    }
 
     if(entry.nat_entry.block_addr == 0) {
         result_nat = skiplist_get(entry.nid);
