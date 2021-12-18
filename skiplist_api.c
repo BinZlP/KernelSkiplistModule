@@ -1,8 +1,16 @@
+#include <linux/kernel.h>
 #include <linux/string.h>
 
 #include "skiplist_api.h"
 
 MultiSkiplist *global_skiplist;
+
+static const char *f2fs_kv_entry_to_string(void *data, char *buff, const int size) {
+    Skiplist_Entry *entry = (Skiplist_Entry *)data;
+    snprintf(buff, 1024, "NodeID: %d {INO: %d, BLK_ADDR: %px, Ver: %d}", 
+        entry->nid, entry->nat_entry.ino, entry->nat_entry.block_addr, entry->nat_entry.version);
+    return buff;
+}
 
 static int f2fs_kv_compare_func(const void *p1, const void *p2) {
     // NAT_Entry *e1 = (NAT_Entry *)p1;
@@ -45,13 +53,15 @@ EXPORT_SYMBOL(f2fs_kv_init);
 
 
 F2FS_NAT_Entry f2fs_kv_get(__u32 node_id) {
-    Skiplist_Entry entry;
+    Skiplist_Entry entry = {0, {0,0,0}};
+    void *ret;
+
     entry.nid = node_id;
-    void *ret = multi_skiplist_find(global_skiplist, (void *)(&entry));
+    ret = multi_skiplist_find(global_skiplist, (void *)(&entry));
 #ifdef _SKIPLIST_API_DEBUG
     if(ret != NULL) {
         // printk("Skiplist | node found - ID: %d\n", ((NAT_Entry *)ret)->node_id);
-        printk("Skiplist | node found - INODE: %d\n", ((F2FS_NAT_Entry *)ret)->ino);
+        printk("Skiplist | node found - INODE: %d\n", ((Skiplist_Entry *)ret)->nid);
     } else {
         printk("Skiplist | node %d not found\n", node_id);
     }
@@ -72,12 +82,10 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     // F2FS_NAT_Entry *entry = (F2FS_NAT_Entry *)kmalloc(sizeof(F2FS_NAT_Entry), GFP_KERNEL);
     Skiplist_Entry *s_entry = (Skiplist_Entry *)kmalloc(sizeof(Skiplist_Entry), GFP_KERNEL);
     s_entry->nid = node_id;
-    s_entry->nat_entry.ino = entry.ino;
-    s_entry->nat_entry.block_addr = entry.block_addr;
-    s_entry->nat_entry.version = entry.version;
+    s_entry->nat_entry = entry;
     
     ret = multi_skiplist_find(global_skiplist, (void *)(&s_entry));
-    if(ret) { // Update data
+    if(ret != NULL) { // Update data
         ((Skiplist_Entry *)ret)->nat_entry = entry;
     } else { // Insert new data
         result = multi_skiplist_insert(global_skiplist, (void *)s_entry);
@@ -85,7 +93,7 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     
 #ifdef _SKIPLIST_API_DEBUG
     if(result == 0) {
-        if(ret)
+        if(ret != NULL)
             printk("Skiplist | Updated node %d\n", node_id);
         else
             printk("Skiplist | Inserted node %d\n", node_id);
@@ -97,6 +105,11 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     return -result;
 }
 EXPORT_SYMBOL(f2fs_kv_put);
+
+void f2fs_kv_print(void) {
+    multi_skiplist_print(global_skiplist, f2fs_kv_entry_to_string);
+}
+EXPORT_SYMBOL(f2fs_kv_print);
 
 
 void f2fs_kv_destroy(void) {

@@ -2,6 +2,7 @@
 #define _SKIPLIST_API_H
 
 #define _SKIPLIST_API_DEBUG // Debug flag
+// #define _SKIPLIST_API_F2FS
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -9,16 +10,22 @@
 #include "multi_skiplist.h"
 #include "common_define.h"
 
+#ifdef SKIPLIST_API_F2FS
+#include <linux/f2fs_fs.h>
+#endif
+
 typedef struct {
     int node_id;
     void *blk_addr;
 }NAT_Entry;
 
+#ifndef SKIPLIST_API_F2FS
 struct f2fs_nat_entry {
     __u8 version;
     __u32 ino;
     __u32 block_addr;
 };
+#endif
 typedef struct f2fs_nat_entry F2FS_NAT_Entry;
 
 typedef struct {
@@ -58,5 +65,12 @@ F2FS_NAT_Entry f2fs_kv_get(__u32 node_id);
  * @return int, < 0 if failed.
  */
 int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry);
+
+
+/**
+ * @brief print entries in skiplist
+ * 
+ */
+void f2fs_kv_print(void);
 
 #endif
