@@ -453,15 +453,17 @@ int multi_skiplist_find_range(MultiSkiplist *sl, void *start_data, void *end_dat
 
 int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf) {
     MultiSkiplistNode *cursor;
-    char *buf = (char *)array_buf;
+    Skiplist_Entry *buf = (Skiplist_Entry *)array_buf;
     int total_write = 0;
 
+    // printk("multi_skiplist_to_array() start");
     cursor = sl->top->links[0];
     while(cursor != sl->tail) {
-        memcpy(cursor->head->data, buf + total_write, sizeof(Skiplist_Entry));
+        buf[total_write] = *((Skiplist_Entry *)cursor->head->data);
         cursor = cursor->links[0];
-        total_write += sizeof(Skiplist_Entry);
+        total_write++;
     }
 
-    return total_write;
+    // printk("multi_skiplist_to_array() end: wrote %d bytes\n", total_write * sizeof(Skiplist_Entry));
+    return total_write * sizeof(Skiplist_Entry);
 }

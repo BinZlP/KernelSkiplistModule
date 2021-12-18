@@ -1,6 +1,5 @@
 #include <linux/string.h>
-#include <linux/spinlock.h>
-
+#include <linux/mutex.h>
 #include "skiplist_api.h"
 
 typedef struct {
@@ -13,7 +12,8 @@ MultiSkiplist *global_skiplist;
 int cur_entry_num, flush_count;
 BlockAddressNode *flushed_head;
 ThreadNode *kthread_head;
-DEFINE_SPINLOCK(check_lock);
+struct mutex check_lock;
+
 
 static const char *f2fs_kv_entry_to_string(void *data, char *buff, const int size) {
     Skiplist_Entry *entry = (Skiplist_Entry *)data;
@@ -49,6 +49,7 @@ static int f2fs_kv_flush_thread(void *arg) {
     Skiplist_Entry tmp_entry;
     int i;
 #endif
+    // printk("Entered flush thread\n");
 
     arr_size = multi_skiplist_to_array(sl, array);
 #ifdef _SKIPLIST_API_DEBUG
@@ -98,6 +99,7 @@ static int f2fs_kv_flush_thread(void *arg) {
     }
     my_node->next = tnode_it;
     
+    // printk("Flush thread end\n");
     return 0;
 }
 
@@ -147,8 +149,13 @@ F2FS_NAT_Entry f2fs_kv_get(__u32 node_id) {
         memcpy(&entry, ret, sizeof(Skiplist_Entry));
     else { // Read data from block addresses & search
         it = flushed_head;
+#ifdef _SKIPLIST_API_DEBUG
+        printk("Skiplist | flushed_head = %px\n", it);
+#endif
         while(it != NULL && !is_found) {
+#ifdef _SKIPLIST_API_DEBUG
             printk("Skiplist | Try to read block_addr %px\n", it->block_address);
+#endif
             blk_buf = 0; // Read from block address here...
 
             if(blk_buf != 0)
@@ -201,7 +208,7 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
         ((Skiplist_Entry *)ret)->nat_entry = entry;
     } else {
         // Check the list is immutable
-        spin_lock_irq(&check_lock);
+        mutex_lock(&check_lock);
         if(cur_entry_num == IMMUTABLE_ENTRY_NUM) {
             new_tnode = (ThreadNode *)kmalloc(sizeof(ThreadNode), GFP_KERNEL);
             new_tnode->prev = NULL;
@@ -215,8 +222,12 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
 
             kth_args.sl = global_skiplist;
             kth_args.node = new_tnode;
-            new_tnode->task = kthread_create(f2fs_kv_flush_thread, &kth_args, "flush-thread-%d", flush_count);
+            new_tnode->task = kthread_run(f2fs_kv_flush_thread, &kth_args, "flush-thread-%d", flush_count);
             flush_count++;
+#ifdef _SKIPLIST_API_DEBUG
+            if(new_tnode->task == ERR_PTR(-ENOMEM) || new_tnode->task == ERR_PTR(-EINTR))
+                printk(KERN_ERR "kthread_create() failed, flush-thread-%d\n", flush_count-1); 
+#endif
 
             global_skiplist = (MultiSkiplist *)kmalloc(sizeof(MultiSkiplist), GFP_KERNEL);
             result = multi_skiplist_init(global_skiplist, sl_max_level, 
@@ -224,7 +235,7 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
             cur_entry_num = 0;
         }
         cur_entry_num++;
-        spin_unlock_irq(&check_lock);
+        mutex_unlock(&check_lock);
 
         // Insert new data
         result = multi_skiplist_insert(global_skiplist, (void *)s_entry);
