@@ -45,8 +45,20 @@ static int f2fs_kv_flush_thread(void *arg) {
     void *blk_addr = NULL; // Block address returned by I/O
     int arr_size = 0;
     void *array = kmalloc(DATA_ARRAY_SIZE, GFP_KERNEL);
+#ifdef _SKIPLIST_API_DEBUG
+    Skiplist_Entry tmp_entry;
+    int i;
+#endif
 
     arr_size = multi_skiplist_to_array(sl, array);
+#ifdef _SKIPLIST_API_DEBUG
+    printk("Flush skiplist : \n");
+    for(i=0; i<arr_size/sizeof(Skiplist_Entry); i++) {
+        tmp_entry = ((Skiplist_Entry *)array)[i];
+        printk("  [%d] %d - %d %px %d\n", i, tmp_entry.nid, tmp_entry.nat_entry.ino, 
+                    tmp_entry.nat_entry.block_addr, tmp_entry.nat_entry.version);
+    }
+#endif
 
     // Post array pointer & get block address
     //   ...
@@ -68,6 +80,7 @@ static int f2fs_kv_flush_thread(void *arg) {
 
     multi_skiplist_destroy(sl);
     kfree(sl);
+    kfree(array);
 
     // Stop finished threads
     my_node->is_done = true;
@@ -134,7 +147,7 @@ F2FS_NAT_Entry f2fs_kv_get(__u32 node_id) {
         memcpy(&entry, ret, sizeof(Skiplist_Entry));
     else { // Read data from block addresses & search
         it = flushed_head;
-        while(it != NULL && is_found) {
+        while(it != NULL && !is_found) {
             printk("Skiplist | Try to read block_addr %px\n", it->block_address);
             blk_buf = 0; // Read from block address here...
 
