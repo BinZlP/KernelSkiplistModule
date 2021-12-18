@@ -21,9 +21,6 @@
 
 #include "multi_skiplist.h"
 
-#define true 1
-#define false 0
-
 int multi_skiplist_init_ex(MultiSkiplist *sl, const int level_count,
         skiplist_compare_func compare_func,
         skiplist_free_func free_func,
@@ -249,7 +246,7 @@ static inline int multi_skiplist_get_level_index(MultiSkiplist *sl)
     unsigned int rand_num;
 
     for (i=0; i<sl->top_level_index; i++) {
-        get_random_bytes(rand_num, sizeof(rand_num));
+        get_random_bytes(&rand_num, sizeof(rand_num));
         if (rand_num % 2) {
             break;
         }

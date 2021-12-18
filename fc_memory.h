@@ -39,7 +39,7 @@ extern "C" {
         void *ptr;
         ptr = kmalloc(size, GFP_KERNEL);
         if (ptr == NULL) {
-            printk(KERN_ERR "file: %s, line: %d, malloc %d bytes fail\n",
+            printk(KERN_ERR "file: %s, line: %d, malloc %ld bytes fail\n",
                     file, line, size);
             if (g_oom_notify != NULL) {
                 g_oom_notify(size);
@@ -56,7 +56,7 @@ extern "C" {
         new_ptr = krealloc(ptr, size, GFP_KERNEL);
 
         if (new_ptr == NULL) {
-            printk(KERN_ERR "file: %s, line: %d, realloc %d bytes fail\n",
+            printk(KERN_ERR "file: %s, line: %d, realloc %ld bytes fail\n",
                     file, line, size);
             if (g_oom_notify != NULL) {
                 g_oom_notify(size);
@@ -92,7 +92,7 @@ extern "C" {
         ptr = kmalloc_array(count, size, GFP_KERNEL);
 
         if (ptr == NULL) {
-            printk(KERN_ERR "file: %s, line: %d, malloc %d bytes fail\n", 
+            printk(KERN_ERR "file: %s, line: %d, malloc %ld bytes fail\n", 
                     file, line, (count * size));
             if (g_oom_notify != NULL) {
                 g_oom_notify(count * size);
