@@ -15,8 +15,6 @@
 MODULE_LICENSE("GPL");
 
 static struct dentry *dir, *output;
-static struct task_struct *task;
-
 
 static int skiplist_put(int node_id, void *blk_addr) {
     int result;
@@ -32,24 +30,30 @@ static void *skiplist_get(int node_id) {
     return result;
 }
 
-static int skiplist_read(struct file *fp, char __user *user_buffer,
+ssize_t skiplist_read(struct file *fp, char __user *user_buffer,
         size_t length, loff_t *position) {
     
     int result;
     void *result_buf;
     NAT_Entry entry;
-    copy_from_user(&entry, user_buffer, length);
+    result = copy_from_user(&entry, user_buffer, length);
+    if(result < 0) {
+        printk(KERN_ERR "copy_from_user() failed: %d\n", result);
+        return -result;
+    }
 
     if(entry.blk_addr == 0) {
         result_buf = skiplist_get(entry.node_id);
-        copy_to_user(user_buffer + sizeof(NAT_Entry) + sizeof(int),
+        result = copy_to_user(user_buffer + sizeof(NAT_Entry) + sizeof(int),
             &result_buf, sizeof(void *));
-        result = result_buf ? 0 : -1;
+        if(result < 0) printk(KERN_ERR "copy_to_user() failed: %d\n", result);
     } else {
         result = skiplist_put(entry.node_id, entry.blk_addr);
-        copy_to_user(user_buffer + sizeof(NAT_Entry), &result, sizeof(int));
+        if(result < 0) return result;
+        result = copy_to_user(user_buffer + sizeof(NAT_Entry), &result, sizeof(int));
+        if(result < 0) printk(KERN_ERR "copy_to_user() failed: %d\n", result);
     }
-    return result;
+    return -result;
 }
 
 static const struct file_operations dbfs_slops = {
