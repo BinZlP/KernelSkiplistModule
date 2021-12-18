@@ -84,7 +84,7 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     s_entry->nid = node_id;
     s_entry->nat_entry = entry;
     
-    ret = multi_skiplist_find(global_skiplist, (void *)(&s_entry));
+    ret = multi_skiplist_find(global_skiplist, (void *)(s_entry));
     if(ret != NULL) { // Update data
         ((Skiplist_Entry *)ret)->nat_entry = entry;
     } else { // Insert new data
