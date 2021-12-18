@@ -26,9 +26,13 @@
 #include "fast_mblock.h"
 #include "skiplist_common.h"
 
+#define IMMUTABLE_SIZE 128 * 1024 * 1024
+#define DATA_ARRAY_SIZE 64
+
 typedef struct multi_skiplist_data
 {
     void *data;
+    int size;
     struct multi_skiplist_data *next;
 } MultiSkiplistData;
 
@@ -153,6 +157,8 @@ static inline void multi_skiplist_print(MultiSkiplist *sl, multi_skiplist_tostri
     printk("###################\n");
     printk("\n");
 }
+
+static inline int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf);
 
 #ifdef __cplusplus
 }

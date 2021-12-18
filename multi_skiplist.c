@@ -20,6 +20,7 @@
 #include <linux/random.h>
 
 #include "multi_skiplist.h"
+#include "skiplist_api.h"
 
 int multi_skiplist_init_ex(MultiSkiplist *sl, const int level_count,
         skiplist_compare_func compare_func,
@@ -113,6 +114,8 @@ int multi_skiplist_init_ex(MultiSkiplist *sl, const int level_count,
     sl->level_count = level_count;
     sl->compare_func = compare_func;
     sl->free_func = free_func;
+
+    sl->is_immutable = false;
 
     // srand(time(NULL));
     return 0;
@@ -449,4 +452,19 @@ int multi_skiplist_find_range(MultiSkiplist *sl, void *start_data, void *end_dat
         iterator->cursor.data = NULL;
         return ENOENT;
     }
+}
+
+static inline int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf) {
+    MultiSkiplistNode *cursor;
+    char *buf = (char *)array_buf;
+    int total_write = 0;
+
+    cursor = sl->top->links[0];
+    while(cursor != sl->tail) {
+        memcpy(cursor->head->data, buf + total_write, sizeof(Skiplist_Entry));
+        cursor = cursor->links[0];
+        total_write += sizeof(Skiplist_Entry);
+    }
+
+    return total_write;
 }
