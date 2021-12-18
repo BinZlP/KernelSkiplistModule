@@ -3,6 +3,11 @@
 
 #include "skiplist_api.h"
 
+typedef struct {
+    MultiSkiplist *sl;
+    ThreadNode *node;
+}ThreadArgs;
+
 int sl_max_level;
 MultiSkiplist *global_skiplist;
 int cur_entry_num, flush_count;
@@ -32,9 +37,9 @@ static void f2fs_kv_free_func(void *ptr) {
     kfree(ptr);
 }
 
-static void f2fs_kv_flush_thread(void **args) {
-    MultiSkiplist *sl = (MultiSkiplist *)args[0];
-    ThreadNode *my_node = (ThreadNode *)args[1];
+static int f2fs_kv_flush_thread(void *arg) {
+    MultiSkiplist *sl = ((ThreadArgs *)arg)->sl;
+    ThreadNode *my_node = ((ThreadArgs *)arg)->node;
     ThreadNode *tnode_it;
     BlockAddressNode *node;
     void *blk_addr = NULL; // Block address returned by I/O
@@ -80,6 +85,7 @@ static void f2fs_kv_flush_thread(void **args) {
     }
     my_node->next = tnode_it;
     
+    return 0;
 }
 
 
@@ -98,7 +104,6 @@ int f2fs_kv_init(const int level_count) {
     cur_entry_num = 0;
     flush_count = 0;
     flushed_head = NULL;
-    temp_skiplist = NULL;
 
     if(result == 0) {
 #ifdef _SKIPLIST_API_DEBUG
@@ -171,7 +176,7 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     void *ret;
 
     ThreadNode *new_tnode;
-    void *kth_args[2];
+    ThreadArgs kth_args;
     // NAT_Entry *entry = (NAT_Entry *)kmalloc(sizeof(NAT_Entry), GFP_KERNEL);
     // F2FS_NAT_Entry *entry = (F2FS_NAT_Entry *)kmalloc(sizeof(F2FS_NAT_Entry), GFP_KERNEL);
     Skiplist_Entry *s_entry = (Skiplist_Entry *)kmalloc(sizeof(Skiplist_Entry), GFP_KERNEL);
@@ -195,9 +200,9 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
             }
             kthread_head = new_tnode;
 
-            kth_args[0] = (void *)global_skiplist;
-            kth_args[1] = (void *)new_tnode;
-            new_tnode->task = kthread_create(f2fs_kv_flush_thread, kth_args, "flush-thread-%d", flush_count);
+            kth_args.sl = global_skiplist;
+            kth_args.node = new_tnode;
+            new_tnode->task = kthread_create(f2fs_kv_flush_thread, &kth_args, "flush-thread-%d", flush_count);
             flush_count++;
 
             global_skiplist = (MultiSkiplist *)kmalloc(sizeof(MultiSkiplist), GFP_KERNEL);
@@ -240,7 +245,7 @@ void f2fs_kv_destroy(void) {
     ThreadNode *cur = kthread_head, *next;
     BlockAddressNode *blk_cur = flushed_head, *blk_next;
     while(cur != NULL) {
-        kthread_stop(&(cur->task));
+        kthread_stop(cur->task);
         next = cur->next;
         kfree(cur);
         cur = next;

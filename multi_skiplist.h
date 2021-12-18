@@ -25,6 +25,7 @@
 #include "common_define.h"
 #include "fast_mblock.h"
 #include "skiplist_common.h"
+#include "skiplist_api.h"
 
 #define IMMUTABLE_SIZE 128 * 1024 * 1024
 #define DATA_ARRAY_SIZE 64
@@ -158,7 +159,7 @@ static inline void multi_skiplist_print(MultiSkiplist *sl, multi_skiplist_tostri
     printk("\n");
 }
 
-static inline int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf);
+int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf);
 
 #ifdef __cplusplus
 }

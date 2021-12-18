@@ -38,18 +38,18 @@ typedef struct {
 
 #define IMMUTABLE_ENTRY_NUM DATA_ARRAY_SIZE/sizeof(Skiplist_Entry)
 
-typedef struct {
+typedef struct _BlockAddressNode{
     void *block_address;
     int size;
-    BlockAddressNode *prev;
-    BlockAddressNode *next;
+    struct _BlockAddressNode *prev;
+    struct _BlockAddressNode *next;
 } BlockAddressNode;
 
-typedef struct {
+typedef struct _ThreadNode{
     struct task_struct *task;
     bool is_done;
-    ThreadNode *prev;
-    ThreadNode *next;
+    struct _ThreadNode *prev;
+    struct _ThreadNode *next;
 } ThreadNode;
 
 /**
