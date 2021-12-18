@@ -16,17 +16,17 @@ MODULE_LICENSE("GPL");
 
 static struct dentry *dir, *output;
 
-static int skiplist_put(int node_id, void *blk_addr) {
+static int skiplist_put(__u32 node_id, F2FS_NAT_Entry entry) {
     int result;
-    
-    result = f2fs_kv_put(node_id, blk_addr);
+
+    result = f2fs_kv_put(node_id, entry);
 
     
     return result;
 }
 
-static void *skiplist_get(int node_id) {
-    void *result = f2fs_kv_get(node_id);
+static F2FS_NAT_Entry skiplist_get(__u32 node_id) {
+    F2FS_NAT_Entry result = f2fs_kv_get(node_id);
     return result;
 }
 
@@ -34,23 +34,29 @@ ssize_t skiplist_read(struct file *fp, char __user *user_buffer,
         size_t length, loff_t *position) {
     
     int result;
-    void *result_buf;
-    NAT_Entry entry;
-    result = copy_from_user(&entry, user_buffer, length);
+    F2FS_NAT_Entry result_nat;
+    // NAT_Entry entry;
+    // F2FS_NAT_Entry entry;
+    Skiplist_Entry entry;
+    result = copy_from_user(&entry, user_buffer, sizeof(entry));
     if(result < 0) {
         printk(KERN_ERR "copy_from_user() failed: %d\n", result);
         return -result;
     }
+    printk("Skiplist | Received data from user: %d - %d %d %d\n", entry.nid, entry.nat_entry.ino, entry.nat_entry.block_addr, entry.nat_entry.version);
 
-    if(entry.blk_addr == 0) {
-        result_buf = skiplist_get(entry.node_id);
-        result = copy_to_user(user_buffer + sizeof(NAT_Entry) + sizeof(int),
-            &result_buf, sizeof(void *));
+    if(entry.nat_entry.block_addr == 0) {
+        result_nat = skiplist_get(entry.nid);
+        entry.nat_entry = result_nat;
+        result = copy_to_user(user_buffer + sizeof(Skiplist_Entry),
+            &entry, sizeof(Skiplist_Entry));
         if(result < 0) printk(KERN_ERR "copy_to_user() failed: %d\n", result);
+        else printk("entry data: %d - %d %d %d\n", entry.nid, entry.nat_entry.ino, 
+                        entry.nat_entry.block_addr, entry.nat_entry.version);
     } else {
-        result = skiplist_put(entry.node_id, entry.blk_addr);
+        result = skiplist_put(entry.nid, entry.nat_entry);
         if(result < 0) return result;
-        result = copy_to_user(user_buffer + sizeof(NAT_Entry), &result, sizeof(int));
+        result = copy_to_user(user_buffer + sizeof(F2FS_NAT_Entry) + sizeof(__u8), &result, sizeof(int));
         if(result < 0) printk(KERN_ERR "copy_to_user() failed: %d\n", result);
     }
     return -result;
