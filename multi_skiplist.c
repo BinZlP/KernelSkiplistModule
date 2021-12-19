@@ -456,7 +456,8 @@ int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf) {
     Skiplist_Entry *buf = (Skiplist_Entry *)array_buf;
     int total_write = 0;
 
-    // printk("multi_skiplist_to_array() start");
+    printk("multi_skiplist_to_array() start, sl: %px, buf: %px\n", sl, array_buf);
+    printk("sl->top: %px\n", sl->top);
     cursor = sl->top->links[0];
     while(cursor != sl->tail) {
         buf[total_write] = *((Skiplist_Entry *)cursor->head->data);
@@ -464,6 +465,6 @@ int multi_skiplist_to_array(MultiSkiplist *sl, void *array_buf) {
         total_write++;
     }
 
-    // printk("multi_skiplist_to_array() end: wrote %d bytes\n", total_write * sizeof(Skiplist_Entry));
+    printk("multi_skiplist_to_array() end: wrote %d bytes\n", total_write * sizeof(Skiplist_Entry));
     return total_write * sizeof(Skiplist_Entry);
 }
