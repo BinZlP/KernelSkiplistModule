@@ -18,11 +18,17 @@ typedef struct {
     struct mutex list_lock;
 } PendingSLManager;
 
+typedef struct {
+    struct work_struct work;
+    MultiSkiplist *sl;
+} WorkData;
+
 int sl_max_level;
 MultiSkiplist *global_skiplist;
 int cur_entry_num, flush_count;
 BlockAddressNode *flushed_head;
 // ThreadNode *kthread_head;
+struct workqueue_struct *flush_wq;
 struct mutex check_lock;
 
 PendingSLManager pending_sl;
@@ -131,8 +137,10 @@ void f2fs_kv_free_func(void *ptr) {
     kfree(ptr);
 }
 
-int f2fs_kv_flush_thread(void *arg) {
-    MultiSkiplist *sl = ((MultiSkiplist *)arg);
+// int f2fs_kv_flush_thread(void *arg) {
+static void f2fs_kv_flush_thread(struct work_struct *work_data) {
+    WorkData *arg = (WorkData *)work_data;
+    MultiSkiplist *sl = arg->sl;
     // ThreadNode *my_node = ((ThreadArgs *)arg)->node;
     // ThreadNode *tnode_it;
     BlockAddressNode *node;
@@ -214,8 +222,9 @@ int f2fs_kv_flush_thread(void *arg) {
     // }
     // my_node->next = tnode_it;
     
-    printk("Flush thread end\n");
-    return 0;
+    kfree(work_data);
+    printk("Flush | Flush thread end\n");
+    // return 0;
 }
 
 
@@ -236,6 +245,7 @@ int f2fs_kv_init(const int level_count) {
     flushed_head = NULL;
 
     mutex_init(&(pending_sl.list_lock));
+    flush_wq = create_workqueue("flush workqueue");
     pending_sl.sl_head = NULL;
 
     if(result == 0) {
@@ -340,6 +350,7 @@ EXPORT_SYMBOL(f2fs_kv_get);
 int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
     int result = 0;
     void *ret;
+    WorkData *work_data;
 
     // ThreadNode *new_tnode;
     // ThreadArgs *kth_args = (ThreadArgs *)kmalloc(sizeof(ThreadArgs), GFP_KERNEL);
@@ -367,11 +378,19 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
             // }
             // kthread_head = new_tnode;
 
+            // Yield flush job to kthread
             // kth_args->sl = global_skiplist;
             // kth_args->node = new_tnode;
             // new_tnode->task = kthread_run(f2fs_kv_flush_thread, kth_args, "flush-thread-%d", flush_count);
-            kthread_run(f2fs_kv_flush_thread, (void *)global_skiplist, "flush-thread-%d", flush_count);
-            flush_count++;
+            // kthread_run(f2fs_kv_flush_thread, (void *)global_skiplist, "flush-thread-%d", flush_count);
+            // flush_count++;
+
+            // Yeild flush job to work queue
+            work_data = (WorkData *)kmalloc(sizeof(WorkData), GFP_ATOMIC);
+            INIT_WORK(&(work_data->work), f2fs_kv_flush_thread);
+            work_data->sl = global_skiplist;
+            queue_work(flush_wq, &(work_data->work));
+            
 #ifdef _SKIPLIST_API_DEBUG
             // if(new_tnode->task == ERR_PTR(-ENOMEM) || new_tnode->task == ERR_PTR(-EINTR))
             //     printk(KERN_ERR "kthread_create() failed, flush-thread-%d\n", flush_count-1); 
@@ -436,6 +455,9 @@ void f2fs_kv_destroy(void) {
 
     multi_skiplist_destroy(global_skiplist);
     kfree(global_skiplist);
+
+    flush_workqueue(flush_wq);
+    destroy_workqueue(flush_wq);
 #ifdef _SKIPLIST_API_DEBUG
     printk("Skiplist | destroyed\n");
 #endif

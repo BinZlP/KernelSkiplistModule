@@ -9,6 +9,7 @@
 #include <linux/kthread.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/workqueue.h>
 
 #include "multi_skiplist.h"
 #include "common_define.h"
