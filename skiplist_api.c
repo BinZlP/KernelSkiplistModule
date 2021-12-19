@@ -7,12 +7,96 @@ typedef struct {
     ThreadNode *node;
 }ThreadArgs;
 
+typedef struct _PendingSLEntry {
+    MultiSkiplist *sl_addr;
+    struct _PendingSLEntry *next;
+    struct _PendingSLEntry *prev;
+} PendingSLEntry;
+
+typedef struct {
+    PendingSLEntry *sl_head;
+    struct mutex list_lock;
+} PendingSLManager;
+
 int sl_max_level;
 MultiSkiplist *global_skiplist;
 int cur_entry_num, flush_count;
 BlockAddressNode *flushed_head;
 // ThreadNode *kthread_head;
 struct mutex check_lock;
+
+PendingSLManager pending_sl;
+
+static inline PendingSLEntry *pending_sl_insert_head(MultiSkiplist *sl) {
+    PendingSLEntry *entry = (PendingSLEntry *)kmalloc(sizeof(PendingSLEntry), GFP_KERNEL);
+    entry->sl_addr = sl;
+    entry->prev = NULL;
+
+    mutex_lock(&(pending_sl.list_lock));
+    if(pending_sl.sl_head == NULL) {
+        entry->next = NULL;
+        pending_sl.sl_head = entry;
+    } else {
+        pending_sl.sl_head->prev = entry;
+        entry->next = pending_sl.sl_head;
+        pending_sl.sl_head = entry;
+    }
+    mutex_unlock(&(pending_sl.list_lock));
+
+    return entry;
+}
+
+static inline void pending_sl_remove_from_list(PendingSLEntry *entry) {
+    PendingSLEntry *tmp;
+
+    mutex_lock(&(pending_sl.list_lock));
+    if(entry == pending_sl.sl_head) {
+        if(entry->next == NULL) // if entry is head & no other entries in list
+            pending_sl.sl_head = NULL;
+        else { // there're some entries behind
+            entry->next->prev = NULL;
+            pending_sl.sl_head = entry->next;
+        }
+    } else {
+        entry->prev->next = entry->next;
+        if(entry->next != NULL) // If this entry is not a tail
+            entry->next->prev = entry->prev;
+    }
+
+    mutex_unlock(&(pending_sl.list_lock));
+
+    multi_skiplist_destroy(entry->sl_addr);
+    kfree(entry->sl_addr);
+    kfree(entry);
+}
+
+static inline Skiplist_Entry pending_sl_get_entry(Skiplist_Entry *target) {
+    PendingSLEntry *it;
+    Skiplist_Entry *find_ret;
+    Skiplist_Entry ret = {0, {0,0,0}};
+
+    mutex_lock(&(pending_sl.list_lock));
+#ifdef _SKIPLIST_API_DEBUG
+    it = pending_sl.sl_head;
+    printk("PendSL | Search start. Head: %px\n", it);
+    while(it != NULL) {
+        it = it->next;
+        ("PendSL | it->next: %px\n", it);
+    }
+#endif
+
+    it = pending_sl.sl_head;
+    while(it != NULL) {
+        find_ret = multi_skiplist_find(it->sl_addr, (void *)target);
+        if(find_ret != NULL) {
+            ret = *find_ret;
+            break;
+        }
+    }
+    mutex_unlock(&(pending_sl.list_lock));
+
+    return ret;
+}
 
 /*
  * Superblock information object from the F2FS node manager initialization.
@@ -52,27 +136,34 @@ int f2fs_kv_flush_thread(void *arg) {
     // ThreadNode *my_node = ((ThreadArgs *)arg)->node;
     // ThreadNode *tnode_it;
     BlockAddressNode *node;
+    PendingSLEntry *psl_entry;
     u32 blkaddr;
-    int arr_size = 0;
+    int arr_size = 0, i;
     int nr_pages = max(DATA_ARRAY_SIZE / PAGE_SIZE, 1);
     struct page *page;
     void *array;
 #ifdef _SKIPLIST_API_DEBUG
     Skiplist_Entry tmp_entry;
+    printk("Flush | Entered flush thread, arg: sl=%px\n", sl);
 #endif
-    printk("Entered flush thread, array: %px / sl=%px\n", array, sl);
-    // printk("arg: sl=%px, my_node=%px\n", sl, my_node);
-    int i;
+
+    psl_entry = pending_sl_insert_head(sl);
+#ifdef _SKIPLIST_API_DEBUG
+    printk("Flush | Insertion to pending sl list completed\n");
+#endif
 
     nr_pages = max(ilog2(nr_pages), 1);
     page = alloc_pages(GFP_KERNEL, max(ilog2(nr_pages), 1));
     nr_pages = 1 << nr_pages;
 
     array = page_address(page);
+#ifdef _SKIPLIST_API_DEBUG
+    printk("Flush |  array: %px / sl=%px\n", array, sl);
+#endif
 
     arr_size = multi_skiplist_to_array(sl, array);
 #ifdef _SKIPLIST_API_DEBUG
-    printk("Flush skiplist : \n");
+    printk("Flush | Flush skiplist : \n");
     for(i=0; i<arr_size/sizeof(Skiplist_Entry); i++) {
         tmp_entry = ((Skiplist_Entry *)array)[i];
         printk("  [%d] %d - %d %px %d\n", i, tmp_entry.nid, tmp_entry.nat_entry.ino, 
@@ -102,8 +193,9 @@ int f2fs_kv_flush_thread(void *arg) {
     }
     flushed_head = node;
 
-    multi_skiplist_destroy(sl);
-    kfree(sl);
+    // multi_skiplist_destroy(sl);
+    // kfree(sl);
+    pending_sl_remove_from_list(psl_entry);
     kfree(array);
 
     // Stop finished threads
@@ -143,6 +235,9 @@ int f2fs_kv_init(const int level_count) {
     flush_count = 0;
     flushed_head = NULL;
 
+    mutex_init(&(pending_sl.list_lock));
+    pending_sl.sl_head = NULL;
+
     if(result == 0) {
 #ifdef _SKIPLIST_API_DEBUG
         printk("Skiplist | Initialized.\n");
@@ -166,7 +261,7 @@ int f2fs_kv_init_sbi(const int level_count, void *_sbi)
 
 
 F2FS_NAT_Entry f2fs_kv_get(__u32 node_id) {
-    Skiplist_Entry entry = {0, {0,0,0}};
+    Skiplist_Entry entry = {0, {0,0,0}}, p_entry = {0, {0,0,0}};
     void *ret, *blk_buf;
     int i;
     BlockAddressNode *it;
@@ -179,41 +274,50 @@ F2FS_NAT_Entry f2fs_kv_get(__u32 node_id) {
     entry.nid = node_id;
     ret = multi_skiplist_find(global_skiplist, (void *)(&entry));
 
-    if(ret != NULL) // If target node found
+    if(ret != NULL) { // If target node found
         memcpy(&entry, ret, sizeof(Skiplist_Entry));
-    else { // Read data from block addresses & search
-        it = flushed_head;
+        is_found = true;
+    } else { // Read data from block addresses & search
+        p_entry = pending_sl_get_entry(&entry);
+
+        if(p_entry.nat_entry.block_addr == 0) {// if entry not found in pending list
+            it = flushed_head;
 #ifdef _SKIPLIST_API_DEBUG
-        printk("Skiplist | flushed_head = %px\n", it);
+            printk("Skiplist | flushed_head = %px\n", it);
 #endif
-        while(it != NULL && !is_found) {
+            while(it != NULL && !is_found) {
 #ifdef _SKIPLIST_API_DEBUG
-            printk("Skiplist | Try to read block_addr %px\n", it->block_address);
+                printk("Skiplist | Try to read block_addr %px\n", it->block_address);
 #endif
 #ifdef _SKIPLIST_API_F2FS
-            page = alloc_pages(GFP_KERNEL, 0);
-            f2fs_kv_read(page, sbi, it->block_address);
-            blk_buf = page_address(page);
-            e = blk_buf;
+                page = alloc_pages(GFP_KERNEL, 0);
+                f2fs_kv_read(page, sbi, it->block_address);
+                blk_buf = page_address(page);
+                e = blk_buf;
 #else
-            blk_buf = 0;
+                blk_buf = 0;
 
-            if(blk_buf != 0)
+                if(blk_buf != 0)
 #endif
-            for(i=0; i<(it->size/sizeof(Skiplist_Entry)); i++) {
-                if(((Skiplist_Entry *)blk_buf)[i].nid == node_id) {
-                    ret = (Skiplist_Entry *)blk_buf + i;
-                    entry = ((Skiplist_Entry *)blk_buf)[i];
-                    is_found = true;
-                    break;
+                for(i=0; i<(it->size/sizeof(Skiplist_Entry)); i++) {
+                    if(((Skiplist_Entry *)blk_buf)[i].nid == node_id) {
+                        ret = (Skiplist_Entry *)blk_buf + i;
+                        entry = ((Skiplist_Entry *)blk_buf)[i];
+                        is_found = true;
+                        break;
+                    }
                 }
+                it = it->next;
             }
-            it = it->next;
+        } else { // if entry found in pending list
+            printk("Found entry in the pending skiplist\n");
+            is_found = true;
+            entry = p_entry;
         }
     }
 
 #ifdef _SKIPLIST_API_DEBUG
-    if(ret != NULL) {
+    if(is_found) {
         // printk("Skiplist | node found - ID: %d\n", ((NAT_Entry *)ret)->node_id);
         printk("Skiplist | node found - INODE: %d\n", ((Skiplist_Entry *)ret)->nid);
     } else {
@@ -266,14 +370,14 @@ int f2fs_kv_put(__u32 node_id, F2FS_NAT_Entry entry) {
             // kth_args->sl = global_skiplist;
             // kth_args->node = new_tnode;
             // new_tnode->task = kthread_run(f2fs_kv_flush_thread, kth_args, "flush-thread-%d", flush_count);
-            kthread_run(f2fs_kv_flush_thread, global_skiplist, "flush-thread-%d", flush_count);
+            kthread_run(f2fs_kv_flush_thread, (void *)global_skiplist, "flush-thread-%d", flush_count);
             flush_count++;
 #ifdef _SKIPLIST_API_DEBUG
             // if(new_tnode->task == ERR_PTR(-ENOMEM) || new_tnode->task == ERR_PTR(-EINTR))
             //     printk(KERN_ERR "kthread_create() failed, flush-thread-%d\n", flush_count-1); 
 #endif
 
-            global_skiplist = (MultiSkiplist *)kmalloc(sizeof(MultiSkiplist), GFP_KERNEL);
+            global_skiplist = (MultiSkiplist *)kmalloc(sizeof(MultiSkiplist), GFP_ATOMIC);
             result = multi_skiplist_init(global_skiplist, sl_max_level, 
                 f2fs_kv_compare_func, f2fs_kv_free_func);
             if(result != 0) {
