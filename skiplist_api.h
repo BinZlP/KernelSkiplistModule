@@ -2,17 +2,18 @@
 #define _SKIPLIST_API_H
 
 #define _SKIPLIST_API_DEBUG // Debug flag
-// #define SKIPLIST_API_F2FS
+//#define _SKIPLIST_API_F2FS
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/kthread.h>
 #include <linux/types.h>
+#include <linux/mm.h>
 
 #include "multi_skiplist.h"
 #include "common_define.h"
 
-#ifdef SKIPLIST_API_F2FS
+#ifdef _SKIPLIST_API_F2FS
 #include <linux/f2fs_fs.h>
 #endif
 
@@ -22,7 +23,7 @@ typedef struct {
     void *blk_addr;
 }NAT_Entry;
 
-#ifndef SKIPLIST_API_F2FS
+#ifndef _SKIPLIST_API_F2FS
 struct f2fs_nat_entry {
     __u8 version;
     __u32 ino;
@@ -59,6 +60,7 @@ typedef struct _ThreadNode{
  * @return int, < 0 if failed.
  */
 int f2fs_kv_init(const int level_count);
+int f2fs_kv_init_sbi(const int level_count, void *_sbi);
 
 /**
  * @brief Destroy global skiplist.
